@@ -49,7 +49,7 @@ class Options(object):
         self.num_boost_round = 10
         self.maxdepth = 3
         self.testsplit = 0.0 #0.2
-        self.seed = 7
+        self.seed = 1
 
         # other options
         self.files = None

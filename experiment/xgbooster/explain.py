@@ -13,7 +13,7 @@
 from __future__ import print_function
 
 import math
-
+from datetime import datetime
 import numpy as np
 import os
 from pysat.examples.hitman import Hitman
@@ -241,15 +241,17 @@ class SMTExplainer(object):
             for c in minimal:
                 if c not in coalition:
                     flag = False
+                    break
             if flag is True:
                return False
         return True
 
 
     def convert_coalition_to_str(self,coalition):
-        c_list = sorted([str(self.sel2fid[h]) for h in coalition])
-        c_str = "-".join(c_list)
-        return c_str, c_list
+        c_list = sorted([self.sel2fid[h] for h in coalition])
+        cs_list = [str(x) for x in c_list]
+        c_str = "-".join(cs_list)
+        return c_str, cs_list
 
 
     def responsibility_index(self,expls, sort=False):
@@ -335,7 +337,7 @@ class SMTExplainer(object):
             normalized_scores = np.round(scores/np.sum(scores),2)
 
         return normalized_scores
-    def compare_index(self,expls,writer=None, idx=None):
+    def compare_index(self,expls,writer=None, lock=None, idx=None):
         response_rank = self.responsibility_index(expls,sort=False)
         holler_rank = self.holler_packel(expls,sort=False)
         deegan_rank = self.deegan_packel(expls,sort=False)
@@ -360,8 +362,14 @@ class SMTExplainer(object):
 
         res = str(idx) + "," + x_vals_str + "," +  resp_str + "," + holler_str + "," + deegan_str + "," + explanations + "," + preambles + "\n"
         if writer is not None:
-            writer.write(res)
-            writer.flush()
+            if lock is not None:
+                with lock:
+                    writer.write(res)
+                    writer.flush()
+            else:
+                writer.write(res)
+                writer.flush()
+
 
         return res
 
@@ -373,7 +381,7 @@ class SMTExplainer(object):
         #
         # plot_bar(xvals, norm_holler, 'Features', 'normalized holler-packel index', basename,  str(idx)+"_holler.png")
 
-    def compute_all_minimal_expls(self, sample,writer=None,idx=None):
+    def compute_all_minimal_expls(self, sample,writer=None,lock=None,idx=None,num_f=None):
         self.time = resource.getrusage(resource.RUSAGE_CHILDREN).ru_utime + \
                     resource.getrusage(resource.RUSAGE_SELF).ru_utime
 
@@ -397,21 +405,55 @@ class SMTExplainer(object):
             else:
                 queue.append(coalition)
             visited[c_str] = True
+        printt=False
         while queue:
             c = queue.popleft()
+            # print("new", c)
             for f_id in self.rhypos:
                 if f_id not in c:
                     c_new = c + [f_id]
                     c_str, c_new_list = self.convert_coalition_to_str(c_new)
                     if visited.get(c_str) is None:
 
-                        if ((self.oracle.solve([self.selv] +c_new) is False) and (self.is_minimal(c_new_list, minimal_coalitions) is True)):
-                            minimal_coalitions[c_str] = (c_new, c_new_list)
-                        else:
-                            queue.append(c_new)
+                        if (self.is_minimal(c_new_list, minimal_coalitions) is True):
+
+                            # print(c_str)
+
+                            start = datetime.now()
+                            flag_ = self.oracle.solve([self.selv] +c_new)
+                            end = datetime.now()
+                            if flag_ == False:
+                                minimal_coalitions[c_str] = (c_new, c_new_list)
+                                print("minimal",c_str)
+                            else:
+                                if (num_f is not None):
+                                    if (len(c_new)<num_f):
+
+                                        queue.append(c_new)
+                                        # print("****")
+                                        # print(c_new)
+                                        # print(c_str)
+                                        visited[c_str]=True
+                                        # print(visited.get(c_str))
+                                        #
+                                        #
+                                        # print("*****")
+
+                                else:
+                                    queue.append(c_new)
+
+                                    visited[c_str] = True
+
+
+                            if printt is False:
+                                print("time taken", (end - start) / 2)
+                                printt = True
+
                         visited[c_str] = True
 
+
         expls = list([x[0] for x in minimal_coalitions.values()])
+        print("expls",expls)
 
         # try:
         all_expls = [sorted([self.sel2fid[h] for h in expl]) for expl in expls]
@@ -437,7 +479,7 @@ class SMTExplainer(object):
             # for key in holler_ranks:
             #     print(" Feature " + self.preamble[key[0]] + " " + " Score: " + str(key[1]))
 
-            res = self.compare_index(all_expls,writer,idx)
+            res = self.compare_index(all_expls,writer,lock,idx)
 
             for expl in all_expls:
                 preamble = [self.preamble[i] for i in expl]

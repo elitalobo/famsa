@@ -258,7 +258,7 @@ class XGBooster(object):
         encoder.save_to(self.encfile)
 
     def explain(self, sample, use_lime=False, use_anchor=False, use_shap=False,
-            expl_ext=None, prefer_ext=False, nof_feats=5,use_bfs=False,writer=None, index=None,dirname=None):
+            expl_ext=None, prefer_ext=False, nof_feats=5,use_bfs=False,writer=None, index=None,dirname=None,lock=None,num_f=None):
         """
             Explain a prediction made for a given sample with a previously
             trained tree ensemble.
@@ -278,7 +278,7 @@ class XGBooster(object):
                                       self.ivars, self.feature_names, self.num_class,
                                       self.options, self)
 
-            expl,res = self.x.compute_all_minimal_expls(np.array(sample),writer,index)
+            expl,res = self.x.compute_all_minimal_expls(np.array(sample),writer,lock,index,num_f)
 
         else:
             if 'x' not in dir(self):

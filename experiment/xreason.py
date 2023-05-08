@@ -22,7 +22,10 @@ import os
 import sys
 from xgbooster import XGBooster, preprocess_dataset
 from multiprocessing import Pool
+import multiprocessing as mp
 
+o_lock=None
+o_file=None
 #
 #==============================================================================
 def show_info():
@@ -41,10 +44,12 @@ def multi_run_wrapper(args):
 
 
 def compute(point,options,idx,fname,dirname,true_y):
+    global o_file, o_lock
     point_ = point.tolist()
 
     # print([float(v.strip()) for v in options.explain.split(',')])
-    expl_file = open(fname, 'w+')
+    # expl_file = open(fname, 'w+')
+    expl_file = None
 
     # read a sample from options.explain
     if options.explain:
@@ -65,11 +70,13 @@ def compute(point,options,idx,fname,dirname,true_y):
                        use_lime=lime_call if options.uselime else None,
                        use_anchor=anchor_call if options.useanchor else None,
                        use_shap=shap_call if options.useshap else None,
-                       nof_feats=options.limefeats, use_bfs=options.usebfs, writer=expl_file, index=idx,
-                       dirname=dirname)
+                       nof_feats=options.limefeats, use_bfs=options.usebfs, writer=o_file, index=idx,
+                       dirname=dirname,lock=o_lock,num_f=6)
 
     feat_sample_exp = xgb.transform(point)
     y_pred = xgb.model.predict(feat_sample_exp)[0]
+
+    # expl_file.close()
     # print(expl)
     # all_expl.append((expl, y_pred))
 
@@ -81,10 +88,16 @@ def compute(point,options,idx,fname,dirname,true_y):
     return (idx,res,expl,y_pred,true_y)
 
 #
+
+o_lock=None
+o_file=None
+
 #==============================================================================
 if __name__ == '__main__':
     # parsing command-line options
     options = Options(sys.argv)
+
+    # global o_file, o_lock
 
     # making output unbuffered
     if sys.version_info.major == 2:
@@ -123,6 +136,7 @@ if __name__ == '__main__':
 
             # encode it and save the encoding to another file
             # xgb.encode(test_on=options.explain)
+
 
         # if options.check_fidelity:
 
@@ -169,45 +183,50 @@ if __name__ == '__main__':
                 data_dir = "shap_data/"
             if os.path.exists(data_dir) is False:
                 os.mkdir(data_dir)
-            expl_file = open(data_dir + data_name + "_points.txt", 'w+')
-            dirname = "data/" + data_name
-            if os.path.exists(dirname) is False:
-                os.mkdir(dirname)
-            fname = dirname +"/" +f + "_imp.pkl"
-            # imp_indices = joblib.load(fname)
+            # expl_file = open(data_dir + data_name + "_points.txt", 'w+')
 
-            idx = 0
-            all_expl=[]
-            # data = None
-            if len(options.files)>=2:
-                data = Data(filename=options.files[1], mapfile=options.mapfile,
-                            separator=options.separator,
-                            use_categorical=options.use_categorical)
+            with open(data_dir + data_name + "_points.txt", "w+") as o_file:
+                o_lock = mp.Lock()
 
-                xgb_test = XGBooster(options, from_data=data)
+                dirname = "data/" + data_name
+                if os.path.exists(dirname) is False:
+                    os.mkdir(dirname)
+                fname = dirname +"/" +f + "_imp.pkl"
+                # imp_indices = joblib.load(fname)
 
-            else:
-                xgb_test = xgb
-            idx=0
+                idx = 0
+                all_expl=[]
+                # data = None
+                if len(options.files)>=2:
+                    data = Data(filename=options.files[1], mapfile=options.mapfile,
+                                separator=options.separator,
+                                use_categorical=options.use_categorical)
 
-            fname = data_dir + data_name + "_points.txt"
-            points=[]
-            for point in xgb_test.X:
+                    xgb_test = XGBooster(options, from_data=data)
 
-                for jdx in range(int(xgb_test.weights[idx])):
-                    points.append((point,options,idx,fname,dirname,xgb_test.Y[idx]))
-                    multi_run_wrapper((point,options,idx,fname,dirname,xgb_test.Y[idx]))
+                else:
+                    xgb_test = xgb
+                idx=0
 
-                idx+=1
-            # points = points[:5]
-            # with Pool(1) as pool:
-            #     result = pool.map(multi_run_wrapper, points)
+                fname = data_dir + data_name + "_points.txt"
+                points=[]
+                result=[]
+                for point in xgb_test.X:
+
+                    for jdx in range(int(xgb_test.weights[idx])):
+                        points.append((point,options,idx,fname,dirname,xgb_test.Y[idx]))
+                        # result.append(multi_run_wrapper((point,options,idx,fname,dirname,xgb_test.Y[idx])))
+
+                    idx+=1
+                # points = points[:5]
+                with Pool() as pool:
+                    result = pool.map(multi_run_wrapper, points)
 
 
 
-                # idx += 1
-            all_expl = result
-            print(dirname + "/" + f  + "_expls.pkl")
-            joblib.dump(all_expl,dirname + "/" + f  + "_expls.pkl")
-            expl_file.close()
+                    # idx += 1
+                all_expl = result
+                print(dirname + "/" + f  + "_expls.pkl")
+                joblib.dump(all_expl,dirname + "/" + f  + "_expls.pkl")
+                # expl_file.close()
 
