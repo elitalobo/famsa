@@ -93,7 +93,7 @@ def experiment_main(path, path_shap, ycol, columns,xmin,xmax):
 	print ('---------------------')
 
 	# Train the adversarial model for LIME with f and psi 
-	adv_lime = Adversarial_Lime_Model1(xtrain, xtest,path,  columns, ss, xmin,xmax,racist_model_f(), innocuous_model_psi()).train(xtrain, ytrain, feature_names=features, perturbation_multiplier=30, categorical_features=categorical)
+	adv_lime = Adversarial_Lime_Model1(xtrain, xtest,path,  columns, ss, xmin,xmax,racist_model_f(), innocuous_model_psi()).train(xtrain, ytrain, feature_names=features, perturbation_multiplier=30, categorical_features=categorical,xgb_estimators=50)
 	adv_explainer = lime.lime_tabular.LimeTabularExplainer(xtrain, feature_names=adv_lime.get_column_names(), discretize_continuous=False, categorical_features=categorical)
                                                
 	explanations = []
@@ -116,8 +116,8 @@ def experiment_main(path, path_shap, ycol, columns,xmin,xmax):
 	#Setup SHAP
 	background_distribution = KMeans(n_clusters=10,random_state=0).fit(xtrain).cluster_centers_
 	adv_shap = Adversarial_Kernel_SHAP_Model(xtrain, xtest, path_shap,columns,racist_model_f(), innocuous_model_psi()).train(xtrain, ytrain,
-			feature_names=features, background_distribution=background_distribution, rf_estimators=100, xgb_estimators=30,n_samples=5e4)
-	adv_kerenel_explainer = shap.KernelExplainer(adv_shap.predict, background_distribution,)
+			feature_names=features, background_distribution=background_distribution, rf_estimators=100, xgb_estimators=40,n_samples=5e4,exclude_num=0)
+	adv_kerenel_explainer = shap.KernelExplainer(adv_shap.predict, background_distribution)
 	explanations = adv_kerenel_explainer.shap_values(xtest)
 
 	# format for display

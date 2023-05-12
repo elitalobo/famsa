@@ -114,3 +114,43 @@ def experiment_summary(explanations, features):
                     top_features[i].append(f)
 
     return get_rank_map(top_features, len(explanations))
+
+
+from sklearn.datasets import make_classification
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier
+
+
+def rank_top_features(X,y,cols,categorical,not_categorical):
+
+    top_cat = []
+    top_noncat = []
+
+
+    feature_names = [f"feature {i}" for i in range(X.shape[1])]
+    forest = RandomForestClassifier(random_state=0,n_estimators=80)
+    forest.fit(X, y)
+
+    importances = forest.feature_importances_
+
+    ranks = np.argsort(importances)
+    print(np.sort(-1.0*importances))
+
+
+    for f in ranks:
+        feature = cols[f]
+        if feature in categorical:
+            top_cat.append(f)
+        else:
+            top_noncat.append(f)
+    selected = list(top_noncat[:7]) + list(top_cat[:4])
+    X_new = X[:,selected]
+    forest = RandomForestClassifier(random_state=0)
+    forest.fit(X_new, y)
+    print(forest.score(X_new,y))
+
+    return selected
+
+
+
+

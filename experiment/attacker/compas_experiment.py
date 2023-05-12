@@ -30,8 +30,8 @@ import lime.lime_tabular
 import shap
 import torch
 
-random.seed(10)
-# np.random.seed(10)
+random.seed(1)
+np.random.seed(1)
 # torch.manual_seed(0)
 
 
@@ -130,7 +130,7 @@ def experiment_main(path, path1, pathshap, pathshap1, ycol, columns,xmin,xmax):
 	print ('---------------------')
 
 	# Train the adversarial model for LIME with f and psi 
-	adv_lime = Adversarial_Lime_Model1(xtrain, xtest, path,  columns, ss, xmin,xmax, racist_model_f(), innocuous_model_psi()).train(xtrain, ytrain, categorical_features=[features.index('unrelated_column_one'),features.index('unrelated_column_two'), features.index('c_charge_degree_F'), features.index('c_charge_degree_M'), features.index('two_year_recid'), features.index('race'), features.index("sex_Male"), features.index("sex_Female")], feature_names=features, perturbation_multiplier=30)
+	adv_lime = Adversarial_Lime_Model1(xtrain, xtest, path,  columns, ss, xmin,xmax, racist_model_f(), innocuous_model_psi()).train(xtrain, ytrain, categorical_features=[features.index('unrelated_column_one'),features.index('unrelated_column_two'), features.index('c_charge_degree_F'), features.index('c_charge_degree_M'), features.index('two_year_recid'), features.index('race'), features.index("sex_Male"), features.index("sex_Female")], feature_names=features, perturbation_multiplier=30,xgb_estimators=100)
 	adv_explainer = lime.lime_tabular.LimeTabularExplainer(xtrain, sample_around_instance=True, feature_names=adv_lime.get_column_names(), categorical_features=[features.index('unrelated_column_one'),features.index('unrelated_column_two'),features.index('c_charge_degree_F'), features.index('c_charge_degree_M'), features.index('two_year_recid'), features.index('race'), features.index("sex_Male"), features.index("sex_Female")], discretize_continuous=False)
 
 
@@ -148,7 +148,7 @@ def experiment_main(path, path1, pathshap, pathshap1, ycol, columns,xmin,xmax):
 
 
 	# Repeat the same thing for two features
-	adv_lime = Adversarial_Lime_Model1(xtrain, xtest,path1,  columns, ss, xmin,xmax,racist_model_f(), innocuous_model_psi_two()).train(xtrain, ytrain, categorical_features=[features.index('unrelated_column_one'),features.index('unrelated_column_two'),features.index('c_charge_degree_F'), features.index('c_charge_degree_M'), features.index('two_year_recid'), features.index('race'), features.index("sex_Male"), features.index("sex_Female")], feature_names=features, perturbation_multiplier=30)
+	adv_lime = Adversarial_Lime_Model1(xtrain, xtest,path1,  columns, ss, xmin,xmax,racist_model_f(), innocuous_model_psi_two()).train(xtrain, ytrain, categorical_features=[features.index('unrelated_column_one'),features.index('unrelated_column_two'),features.index('c_charge_degree_F'), features.index('c_charge_degree_M'), features.index('two_year_recid'), features.index('race'), features.index("sex_Male"), features.index("sex_Female")], feature_names=features, perturbation_multiplier=30,xgb_estimators=100)
 	adv_explainer = lime.lime_tabular.LimeTabularExplainer(xtrain, feature_names=adv_lime.get_column_names(), categorical_features=[features.index('unrelated_column_one'),features.index('unrelated_column_two'),features.index('c_charge_degree_F'), features.index('c_charge_degree_M'), features.index('two_year_recid'), features.index('race'), features.index("sex_Male"), features.index("sex_Female")], discretize_continuous=False)
                                                
 	explanations = []
@@ -169,7 +169,7 @@ def experiment_main(path, path1, pathshap, pathshap1, ycol, columns,xmin,xmax):
 
 	#Setup SHAP
 	background_distribution = shap.kmeans(xtrain,10)
-	adv_shap = Adversarial_Kernel_SHAP_Model(xtrain, xtest, pathshap, columns,racist_model_f(), innocuous_model_psi()).train(xtrain, ytrain, feature_names=features,xgb_estimators=50)
+	adv_shap = Adversarial_Kernel_SHAP_Model(xtrain, xtest, pathshap, columns,racist_model_f(), innocuous_model_psi()).train(xtrain, ytrain, feature_names=features,xgb_estimators=100)
 	adv_kerenel_explainer = shap.KernelExplainer(adv_shap.predict, background_distribution)
 	explanations = adv_kerenel_explainer.shap_values(xtest)
 
@@ -185,7 +185,7 @@ def experiment_main(path, path1, pathshap, pathshap1, ycol, columns,xmin,xmax):
 	print ("Fidelity:",round(adv_shap.fidelity(xtest),2))
 
 	background_distribution = shap.kmeans(xtrain,10)
-	adv_shap = Adversarial_Kernel_SHAP_Model(xtrain,xtest,pathshap1,columns,racist_model_f(), innocuous_model_psi_two()).train(xtrain, ytrain, feature_names=features,xgb_estimators=50)
+	adv_shap = Adversarial_Kernel_SHAP_Model(xtrain,xtest,pathshap1,columns,racist_model_f(), innocuous_model_psi_two()).train(xtrain, ytrain, feature_names=features,xgb_estimators=100)
 	adv_kerenel_explainer = shap.KernelExplainer(adv_shap.predict, background_distribution)
 	explanations = adv_kerenel_explainer.shap_values(xtest)
 
@@ -196,7 +196,7 @@ def experiment_main(path, path1, pathshap, pathshap1, ycol, columns,xmin,xmax):
 
 	print ("SHAP Ranks and Pct Occurances two unrelated features:")
 	e = experiment_summary(formatted_explanations, features)
-	save_results(pathshap,e,"shap")
+	save_results(pathshap1,e,"shap")
 	print (e)
 	print ("Fidelity:",round(adv_shap.fidelity(xtest),2))
 	print ('---------------------')

@@ -1,5 +1,6 @@
 import copy
 import os.path
+import random
 
 import numpy as np
 import pandas as pd
@@ -13,6 +14,8 @@ from xgboost import XGBClassifier
 from copy import deepcopy
 
 import shap
+np.random.seed(1)
+random.seed(1)
 
 class Adversarial_Model(object):
 	"""	A scikit-learn style adversarial explainer base class for adversarial models.  This accetps 
@@ -366,7 +369,7 @@ class Adversarial_Lime_Model1(Adversarial_Model):
 
 
 	def train(self, X, y, feature_names, perturbation_multiplier=30, categorical_features=[], rf_estimators=100,
-			  estimator=None):
+			  estimator=None,xgb_estimators=100):
 		""" Trains the adversarial LIME model.  This method trains the perturbation detection classifier to detect instances
 		that are either in the manifold or not if no estimator is provided.
 
@@ -434,7 +437,7 @@ class Adversarial_Lime_Model1(Adversarial_Model):
 			self.perturbation_identifier = estimator.fit(xtrain, ytrain)
 		else:
 			# self.perturbation_identifier = RandomForestClassifier(n_estimators=rf_estimators).fit(xtrain, ytrain)
-			param_dist = {'n_estimators': 100,
+			param_dist = {'n_estimators': xgb_estimators,
 						  'max_depth': 3, 'random_state':10, 'seed':10}
 
 			param_dist['objective'] = 'binary:logistic'
@@ -511,7 +514,7 @@ class Adversarial_Kernel_SHAP_Model(Adversarial_Model):
 		np.save(self.path + "ypred_test.npy", np.array(ytest_pred))
 
 	def train(self, X, y, feature_names, background_distribution=None, perturbation_multiplier=10, n_samples=2e4,
-			  rf_estimators=100, n_kmeans=10, estimator=None,xgb_estimators=30):
+			  rf_estimators=100, n_kmeans=10, estimator=None,xgb_estimators=20,exclude_num=0):
 		""" Trains the adversarial SHAP model. This method perturbs the shap training distribution by sampling from
 		its kmeans and randomly adding features.  These points get substituted into a test set.  We also check to make
 		sure that the instance isn't in the test set before adding it to the out of distribution set. If an estimator is
@@ -560,8 +563,8 @@ class Adversarial_Kernel_SHAP_Model(Adversarial_Model):
 			point = deepcopy(X[i, :])
 
 			# iterate over points, sampling and updating
-			for _ in range(X.shape[1]):
-				j = np.random.choice(X.shape[1])
+			for _ in range(X.shape[1]-exclude_num):
+				j = np.random.choice(X.shape[1]-exclude_num)
 				point[j] = deepcopy(background_distribution[np.random.choice(background_distribution.shape[0]), j])
 
 			new_instances.append(point)
@@ -591,6 +594,8 @@ class Adversarial_Kernel_SHAP_Model(Adversarial_Model):
 			self.perturbation_identifier = XGBClassifier(**param_dist)
 
 			self.perturbation_identifier.fit(xtrain, ytrain)
+			print("train score",self.perturbation_identifier.score(xtrain,ytrain))
+
 		ypred = self.perturbation_identifier.predict(xtest)
 
 		Xtest = self.Xtest_
