@@ -20,7 +20,7 @@ def plot_bar(all_res,fname ,dir="plots/"):
 
     fig.set_size_inches(8,8)
 
-    colors=['red','blue','green','magenta']
+    colors=['red','blue','green','magenta','orange']
     # plotting columns
     idx=0
     handles=[]
@@ -76,7 +76,7 @@ def load_data(path, filename,name="compas"):
     if name=="compas":
         features = ['race','unrelated_column_one','unrelated_column_two']
     else:
-        features = ['gender', 'unrelated_column_one', 'unrelated_column_two']
+        features = ['Gender', 'LoanRateAsPercentOfIncome']
 
 
     all_res = {}
@@ -86,7 +86,7 @@ def load_data(path, filename,name="compas"):
             fname = path + label + ".pkl"
             res = joblib.load(fname)
         except:
-            print("here")
+            # print("here")
             continue
         results={}
 
@@ -109,7 +109,11 @@ def load_data(path, filename,name="compas"):
             # results['other'][idx]=sum
         
         all_res[label]=results
-    
+    for key, value in all_res.items():
+        for subkey, subvalue in value.items():
+            print(filename + " key", key)
+            print(filename + " subkey", subkey)
+            print(filename+" subvalue", np.round(subvalue,2))
     plot_bar(all_res,filename)
                     
                     
@@ -121,15 +125,21 @@ def load_data(path, filename,name="compas"):
 
 
 if __name__=='__main__':
-    path = "../bench/fairml/compas_ood/"
-    load_data(path,"compas_ood")
+    # path = "../bench/fairml/compas_ood/"
+    # load_data(path,"compas_ood")
+    # #
+    # path = "../bench/fairml/compas_ood1/"
+    # load_data(path, "compas_ood1")
 
-    path = "../bench/fairml/compas_ood1/"
-    load_data(path, "compas_ood1")
+    print("german smodified")
+    path = "../bench/fairml/german_smodified/"
+    load_data(path, "german_smodified",name="germanShap")
 
-    path = "../bench/fairml/german_ood/"
-    load_data(path, "german_ood",name="german")
+    print("german lmodified")
 
+    path = "../bench/fairml/german_lmodified/"
+    load_data(path, "german_lmodified", name="germanLime")
+    # #
     # path = "../bench/fairml/compas_shapood/"
     # load_data(path, "compas_shapood")
     #

@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import joblib
 import math
-from find_compass_custom import *
+from compas_adversarial import *
 
 if __name__=='__main__':
     path = "data/german_lmodified_nbestim_50_maxdepth_3_testsplit_0.0.mod_nbestim_100_maxdepth_3_testsplit_0.0/g_expls.pkl"

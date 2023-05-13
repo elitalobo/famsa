@@ -14,17 +14,16 @@ def get_string_form(expl_indices):
 class IndexComputer():
     def __init__(self,expls,n_features,preamble,path, p_features, neg_features,map_f):
         self.expls = expls
-        self.n_features = n_features + len(p_features) + len(neg_features)
-        self.nf = n_features
+        self.n_features = n_features
         self.preamble = preamble
         self.basename = path.split("/")[1]
-        self.num_features_add = len(p_features) + len(neg_features)
         self.p_features = p_features
         self.neg_features = neg_features
         self.map_f = map_f
 
 
-    def get_indice_values(self):
+
+    def get_indice_values(self,add_features=True):
         self.holler={}
         self.deegan={}
         self.resp={}
@@ -36,54 +35,50 @@ class IndexComputer():
         self.holler_rank = {}
 
 
-
-        idx=0
-
         for expl in self.expls:
             explanations = {}
 
-            ypred = expl[1]
-            explanation = expl[0]
+
+            idx, res, explanation, ypred, true_y = expl
             es=[]
             for e in explanation:
+                if add_features==True:
 
-                if int(ypred)==1:
+                    if int(ypred)==1:
 
-                    for jdx in range(len(self.p_features)):
-                        k = self.map_f[self.p_features[jdx]]
-                        if k not in e:
-                            e.append(k)
+                        for jdx in range(len(self.p_features)):
+                            k = self.map_f[self.p_features[jdx]]
+                            if k not in e:
+                                e.append(k)
 
-                else:
-                    for jdx in range(len(self.neg_features)):
-                        k = self.map_f[self.neg_features[jdx]]
-                        if k not in e:
-                            e.append(k)
+                    else:
+                        for jdx in range(len(self.neg_features)):
+                            k = self.map_f[self.neg_features[jdx]]
+                            if k not in e:
+                                e.append(k)
                 es_str = get_string_form(e)
 
                 explanations[es_str] = True
 
                 es.append(e)
 
+            if add_features == True:
+                new_es=[]
+                expls = list(explanations.keys())
+                for es_str in expls:
+                    flag=False
+                    for ex in expls:
 
+                        if (es_str in ex and ex!=es_str):
+                            flag = True
+                            break
+                    if flag == True:
+                        continue
+                    else:
+                        e = [int(x) for x in es_str.split("-")]
+                        new_es.append(e)
 
-
-            new_es=[]
-            expls = explanations.keys()
-            for es_str in expls:
-                flag=False
-                for ex in expls:
-
-                    if (es_str in ex and ex!=es_str):
-                        flag = True
-                        break
-                if flag == True:
-                    continue
-                else:
-                    e = [int(x) for x in es_str.split("-")]
-                    new_es.append(e)
-
-            es = new_es
+                es = new_es
 
 
 
@@ -103,9 +98,8 @@ class IndexComputer():
             self.res.append(tuple([values, abs_vals, idx]))
 
             abs_vals = np.max(np.abs(
-                values[1, :] - values[2, :]))
+                h- d))
             self.res_holler.append(tuple([values, abs_vals, idx]))
-            idx+=1
 
     def responsibility_index(self, expls, sort=False):
         n_features = self.n_features
@@ -204,9 +198,6 @@ class IndexComputer():
         return norm_response, norm_holler, norm_deegan, self.preamble
 
 
-
-
-
     def plot_bar(self, xvals, yvals,ylabel, xlabel,basename, filename, dir="plots/",pred=None):
         plt.clf()
         plt.rc('legend', fontsize=28)
@@ -228,8 +219,8 @@ class IndexComputer():
 
         plt.xlabel(xlabel)
         plt.ylabel(ylabel)
-        print("current dir")
-        print(os.getcwd())
+        # print("current dir")
+        # print(os.getcwd())
         plt.xticks(rotation=20)
 
 
@@ -288,6 +279,71 @@ class IndexComputer():
 
         return deegan, holler, resp, self.preamble
 
+
+
+
+    # def extract_points(self):
+    #
+    #     basename = self.basename
+    #     resp = self.resp
+    #     holler = self.holler
+    #     deegan = self.deegan
+    #     labels = self.preamble
+    #
+    #     self.res.sort(key=lambda a: a[1],reverse=True)
+    #     self.res_holler.sort(key=lambda a: a[1],reverse=True)
+    #
+    #     for idx in range(5):
+    #         yvals = self.res[idx][0][0,:]
+    #         xvals = labels
+    #         xlabel = 'Responsibility index value'
+    #         ylabel = 'features'
+    #         file = "response_" + str(self.res[idx][2])
+    #
+    #         print(xlabel + " " + str(idx))
+    #         print(xvals)
+    #         print(ylabel)
+    #         print(yvals)
+    #
+    #         yvals = self.res[idx][0][1,:]
+    #         xvals = labels
+    #         xlabel = 'Holler-packel index value'
+    #         ylabel = 'features'
+    #         file = "holler_" + str(self.res[idx][2])
+    #         print(xlabel + " " + str(idx))
+    #         print(xvals)
+    #         print(ylabel)
+    #         print(yvals)
+    #
+    #         yvals = self.res[idx][0][2,:]
+    #         xvals = labels
+    #         xlabel = 'Deegan-packel index value'
+    #         ylabel = 'features'
+    #         file = "deegan_" + str(self.res[idx][2])
+    #         print(xlabel + " " + str(idx))
+    #         print(xvals)
+    #         print(ylabel)
+    #         print(yvals)
+    #
+    #
+    #     # for idx in range(5):
+    #     #
+    #     #     yvals = self.res_holler[idx][0][1,:]
+    #     #     xvals = labels
+    #     #     xlabel = 'Holler-packel index value'
+    #     #     ylabel = 'features'
+    #     #     file = "x_holler_" + str(self.res_holler[idx][2])
+    #     #     self.plot_bar(xvals, yvals, xlabel, ylabel, basename, file)
+    #     #
+    #     #     yvals = self.res_holler[idx][0][2,:]
+    #     #     xvals = labels
+    #     #     xlabel = 'Deegan-packel index value'
+    #     #     ylabel = 'features'
+    #     #     file = "x_deegan_" + str(self.res_holler[idx][2])
+    #     #     self.plot_bar(xvals, yvals, xlabel, ylabel, basename, file)
+    #
+    #     return deegan, holler, resp, self.preamble
+    #
 
 
 
@@ -412,13 +468,6 @@ def experiment_summary(explanations, features):
             if tuple[0]<3:
                 r = tuple[0]
                 top_features[r].append(tuple[1])
-
-        # for i in range(3):
-        #     j=0
-        #     for f in features:
-        #        if ranks[j]==i+1:
-        #             top_features[i].append(f)
-        #        j+=1
 
     return get_rank_map(top_features, len(explanations))
 
