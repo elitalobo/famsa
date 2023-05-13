@@ -71,17 +71,11 @@ def compute(point,options,idx,fname,dirname,true_y):
                        use_anchor=anchor_call if options.useanchor else None,
                        use_shap=shap_call if options.useshap else None,
                        nof_feats=options.limefeats, use_bfs=options.usebfs, writer=o_file, index=idx,
-                       dirname=dirname,lock=o_lock,num_f=6)
+                       dirname=dirname,lock=o_lock,num_f=100)
 
     feat_sample_exp = xgb.transform(point)
     y_pred = xgb.model.predict(feat_sample_exp)[0]
 
-    # expl_file.close()
-    # print(expl)
-    # all_expl.append((expl, y_pred))
-
-    # if idx % 10 == 0:
-    #     joblib.dump(np.array(all_expl), dirname + "/" + f + "_expls.pkl")
 
     if (options.uselime or options.useanchor or options.useshap) and options.validate:
         xgb.validate(options.explain, expl)
@@ -176,11 +170,14 @@ if __name__ == '__main__':
             except:
                 f = options.files[0].split("/")[-1].strip(".csv")[0]
             data_name = xgb.basename.split("/")[-1]
+            type="mwc"
             data_dir = "mwc_data/"
             if options.uselime:
                 data_dir = "lime_data/"
+                type="lime"
             if options.useshap:
                 data_dir = "shap_data/"
+                type="shap"
             if os.path.exists(data_dir) is False:
                 os.mkdir(data_dir)
             # expl_file = open(data_dir + data_name + "_points.txt", 'w+')
@@ -191,7 +188,7 @@ if __name__ == '__main__':
                 dirname = "data/" + data_name
                 if os.path.exists(dirname) is False:
                     os.mkdir(dirname)
-                fname = dirname +"/" +f + "_imp.pkl"
+                fname = dirname +"/" +"imp.pkl"
                 # imp_indices = joblib.load(fname)
 
                 idx = 0
@@ -226,7 +223,7 @@ if __name__ == '__main__':
 
                     # idx += 1
                 all_expl = result
-                print(dirname + "/" + f  + "_expls.pkl")
-                joblib.dump(all_expl,dirname + "/" + f  + "_expls.pkl")
+                print(dirname + "/" +type+ "_expls.pkl")
+                joblib.dump(all_expl,dirname + "/"  + type+ "_expls.pkl")
                 # expl_file.close()
 
