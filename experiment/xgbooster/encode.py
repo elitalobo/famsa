@@ -33,7 +33,7 @@ class SMTEncoder(object):
         Encoder of XGBoost tree ensembles into SMT.
     """
 
-    def __init__(self, model, feats, nof_classes, xgb, from_file=None):
+    def     __init__(self, model, feats, nof_classes, xgb, from_file=None):
         """
             Constructor.
         """

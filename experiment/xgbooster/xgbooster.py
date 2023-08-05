@@ -109,6 +109,7 @@ class XGBooster(object):
                     self.encoder.update({i: OneHotEncoder(categories='auto', sparse=False)})#,
                     self.encoder[i].fit(self.X[:,[i]])
 
+
             else:
                 self.categorical_features = []
                 self.categorical_names = []
@@ -258,7 +259,7 @@ class XGBooster(object):
         encoder.save_to(self.encfile)
 
     def explain(self, sample, use_lime=False, use_anchor=False, use_shap=False,
-            expl_ext=None, prefer_ext=False, nof_feats=5,use_bfs=False,writer=None, index=None,dirname=None,lock=None,num_f=None):
+            expl_ext=None, prefer_ext=False, nof_feats=5,use_bfs=False,writer=None, index=None,dirname=None,lock=None,num_f=None,kwargs=None):
         """
             Explain a prediction made for a given sample with a previously
             trained tree ensemble.
@@ -278,7 +279,7 @@ class XGBooster(object):
                                       self.ivars, self.feature_names, self.num_class,
                                       self.options, self)
 
-            expl,res = self.x.compute_all_minimal_expls(np.array(sample),writer,lock,index,num_f)
+            expl,res = self.x.compute_all_minimal_expls(np.array(sample),writer,lock,index,num_f,kwargs)
 
         else:
             if 'x' not in dir(self):
@@ -327,7 +328,11 @@ class XGBooster(object):
             assert(self.encoder != [])
             tx = []
             for i in range(self.nb_features):
-                self.encoder[i].drop = None
+                try:
+                    self.encoder[i].drop = None
+                except:
+                    pass
+                # self.encoder[i].drop = None
                 if (i in self.categorical_features):
                     tx_aux = self.encoder[i].transform(x[:,[i]])
                     tx_aux = np.vstack(tx_aux)

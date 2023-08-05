@@ -19,10 +19,12 @@ from options import Options
 import joblib
 import numpy as np
 import os
+import yaml
 import sys
 from xgbooster import XGBooster, preprocess_dataset
 from multiprocessing import Pool
 import multiprocessing as mp
+from yaml import load, dump
 
 o_lock=None
 o_file=None
@@ -43,7 +45,7 @@ def multi_run_wrapper(args):
    return compute(*args)
 
 
-def compute(point,options,idx,fname,dirname,true_y):
+def compute(point,options,idx,fname,dirname,true_y,config):
     global o_file, o_lock
     point_ = point.tolist()
 
@@ -67,21 +69,16 @@ def compute(point,options,idx,fname,dirname,true_y):
 
     # explain using anchor or the abduction-based approach
 
-    fb_id=0
-    fub_id=1
-    label=0
-    if true_y==0 and fb_id==1:
-        label=1
-    if true_y==1 and fub_id==1:
-        label=1
 
-    kwargs = {
-        "fb_id":(),
-        "fub_id":(),
-        "label": label,
-        "true_y": true_y
-    }
 
+
+
+
+    feat_sample_exp = xgb.transform(point)
+    y_pred = xgb.model.predict(feat_sample_exp)[0]
+    kwargs = config
+    kwargs['true_y'] = y_pred
+    print("predicted",y_pred)
 
     expl,res = xgb.explain(point,
                        use_lime=lime_call if options.uselime else None,
@@ -90,8 +87,7 @@ def compute(point,options,idx,fname,dirname,true_y):
                        nof_feats=options.limefeats, use_bfs=options.usebfs, writer=o_file, index=idx,
                        dirname=dirname,lock=o_lock,num_f=100,kwargs=kwargs)
 
-    feat_sample_exp = xgb.transform(point)
-    y_pred = xgb.model.predict(feat_sample_exp)[0]
+
 
 
     if (options.uselime or options.useanchor or options.useshap) and options.validate:
@@ -177,10 +173,25 @@ if __name__ == '__main__':
         if options.uselime or options.useanchor or options.useshap:
             xgb = XGBooster(options, from_model=options.files[0])
 
+        try:
+
+            folder = "/".join(options.files[1].split("/")[:4])
+
+            config=None
+            try:
+                fpath = folder + "/config.yml"
+                with open(fpath, "r") as stream:
+                    try:
+                        config = yaml.safe_load(stream)
+                    except yaml.YAMLError as exc:
+                        print(exc)
+            except:
+                assert("config.yml not found")
+        except:
+            config=None
+
+
         if options.explain:
-            # bench_name = os.path.splitext(os.path.basename(options.files[0]))[0]
-            #
-            # bench_name +="_nbestim_" + str(options.n_estimators) +"_maxdepth_" + str(options.maxdepth) +"_testsplit_" + str(options.testsplit)
 
             try:
                 f = options.files[1].split("/")[-1].strip(".csv")[0]
@@ -231,14 +242,10 @@ if __name__ == '__main__':
             for point in xgb_test.X:
 
                 for jdx in range(int(xgb_test.weights[idx])):
-                    points.append((point,options,idx,fname,dirname,xgb_test.Y[idx]))
-                    # result.append(multi_run_wrapper((point,options,idx,fname,dirname,xgb_test.Y[idx])))
+                    points.append((point,options,idx,fname,dirname,xgb_test.Y[idx],config))
+                    result.append(multi_run_wrapper((point,options,idx,fname,dirname,xgb_test.Y[idx],config)))
 
                 idx+=1
-            # points = points[:5]
-            with Pool() as pool:
-                result = pool.map(multi_run_wrapper, points)
-
 
 
                 # idx += 1

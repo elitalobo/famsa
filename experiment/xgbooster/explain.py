@@ -19,13 +19,15 @@ import os
 from pysat.examples.hitman import Hitman
 from pysat.formula import IDPool
 from pysmt.shortcuts import Solver
-from pysmt.shortcuts import And, BOOL, Implies, Not, Or, Symbol
+from pysmt.shortcuts import And, BOOL, Implies, Not, Or, Symbol, Iff
 from pysmt.shortcuts import Equals, GT, Int, Real, REAL
 import resource
 from six.moves import range
 import sys
 import collections
 import matplotlib.pyplot as plt
+
+from pysmt.typing import INT, REAL
 #
 #==============================================================================
 
@@ -132,11 +134,222 @@ class SMTExplainer(object):
         for c in range(self.nofcl):
             self.outs.append(Symbol('class{0}_score'.format(c), typename=REAL))
 
+
         # theory
         self.oracle.add_assertion(formula)
 
         # current selector
         self.selv = None
+
+    def get_categorical_positions(self,f_id):
+        variable_names = self.xgb.extended_feature_names_as_array_strings
+        ids=[]
+        idx=0
+        names=[]
+        for name in variable_names:
+            feature_id = int(name.split("_")[0].strip('f'))
+            if feature_id==int(f_id):
+                ids.append(idx)
+                names.append(name)
+            idx+=1
+        return ids, names
+
+
+
+    def prepare_(self, sample,kwargs=None):
+        """
+            Prepare the oracle for computing an explanation.
+        """
+
+        self.orig_sample = sample
+
+        if self.selv:
+            # disable the previous assumption if any
+            self.oracle.add_assertion(Not(self.selv))
+
+        # creating a fresh selector for a new sample
+        sname = ','.join([str(v).strip() for v in sample])
+
+        # the samples should not repeat; otherwise, they will be
+        # inconsistent with the previously introduced selectors
+        assert sname not in self.idmgr.obj2id, 'this sample has been considered before (sample {0})'.format(self.idmgr.id(sname))
+        self.selv = Symbol('sample{0}_selv'.format(self.idmgr.id(sname)), typename=BOOL)
+
+        self.rhypos = []  # relaxed hypotheses
+
+        # transformed sample
+        self.sample = list(self.xgb.transform(sample)[0])
+
+        self.sel2fid = {}  # selectors to original feature ids
+        self.sel2vid = {}  # selectors to categorical feature ids
+
+        # preparing the selectors
+        for i, (inp, val) in enumerate(zip(self.inps, self.sample), 1):
+            feat = inp.symbol_name().split('_')[0]
+            selv = Symbol('selv_{0}'.format(feat))
+            val = float(val)
+
+            self.rhypos.append(selv)
+            if selv not in self.sel2fid:
+                self.sel2fid[selv] = int(feat[1:])
+                self.sel2vid[selv] = [i - 1]
+            else:
+                self.sel2vid[selv].append(i - 1)
+
+        # adding relaxed hypotheses to the oracle
+        if not self.intvs:
+            for inp, val, sel in zip(self.inps, self.sample, self.rhypos):
+                if '_' not in inp.symbol_name():
+                    hypo = Implies(self.selv, Implies(sel, Equals(inp, Real(float(val)))))
+                else:
+                    hypo = Implies(self.selv, Implies(sel, inp if val else Not(inp)))
+
+                self.oracle.add_assertion(hypo)
+        else:
+            for inp, val, sel in zip(self.inps, self.sample, self.rhypos):
+                inp = inp.symbol_name()
+                # determining the right interval and the corresponding variable
+                for ub, fvar in zip(self.intvs[inp], self.ivars[inp]):
+                    if ub == '+' or val < ub:
+                        hypo = Implies(self.selv, Implies(sel, fvar))
+                        break
+
+                self.oracle.add_assertion(hypo)
+
+        # in case of categorical data, there are selector duplicates
+        # and we need to remove them
+        self.rhypos = sorted(set(self.rhypos), key=lambda x: int(x.symbol_name()[6:]))
+
+        # propagating the true observation
+        if self.oracle.solve([self.selv] + self.rhypos):
+            model = self.oracle.get_model()
+        else:
+            assert 0, 'Formula is unsatisfiable under given assumptions'
+
+        # choosing the maximum
+        outvals = [float(model.get_py_value(o)) for o in self.outs]
+        maxoval = max(zip(outvals, range(len(outvals))))
+
+        # correct class id (corresponds to the maximum computed)
+        self.out_id = maxoval[1]
+        self.output = self.xgb.target_name[self.out_id]
+
+        true_y = kwargs["true_y"] #is_ood  0 if ood 1 if in-dist
+
+
+
+
+        ub_features = list(kwargs['unbiased'].values())
+        b_features = list(kwargs['biased'].values())
+
+        # force contradiction
+
+        fb_id = b_features[0]['id']
+        fb_id_zero = b_features[0]['min']
+        fb_id_one = b_features[0]['max']
+        true_fb_ids, fb_names = self.get_categorical_positions(fb_id)
+
+
+
+
+        if len(ub_features)==1:
+            fub_id = ub_features[0]['id']
+            fub_id_zero = ub_features[0]['min']
+            fub_id_one = ub_features[0]['max']
+            true_fub_ids, fub_names = self.get_categorical_positions(fub_id)
+
+
+            if true_y==1:
+                orig_label = self.orig_sample[fb_id]==fb_id_one
+            else:
+                orig_label = self.orig_sample[fub_id]==fub_id_one
+
+            # force a contradiction
+            label = 1 - orig_label
+
+
+            # final label is true if (not ood and biased_f ==1) or (ood and unbiased f==1)
+
+            if label==1:
+                # if race==1 and is_ood=0  -> label =1
+                # if unrelated_feature ==1 and is_ood ==1 -> label =1
+                v = And([self.inps[true_fb_ids[1]], GT(self.outs[1], self.outs[0])])
+                w = And([self.inps[true_fub_ids[1]], GT(self.outs[0], self.outs[1])])
+                # self.oracle.add_assertion(Or([v, w]))
+
+
+            else:
+                # final label is true if (not ood and biased_f ==0) or (ood and unbiased f==0)
+                v = And([self.inps[true_fb_ids[0]], GT(self.outs[0], self.outs[1])])
+                w = And([self.inps[true_fub_ids[0]], GT(self.outs[1], self.outs[0])])
+            self.oracle.add_assertion(Or([v, w]))
+
+
+
+
+        elif len(ub_features)==2:
+            fub_id = ub_features[0]['id']
+            fub_id_zero = ub_features[0]['min']
+            fub_id_one = ub_features[0]['max']
+            fub_id1 = ub_features[1]['id']
+            fub_id1_zero = ub_features[1]['min']
+            fub_id1_one = ub_features[1]['max']
+
+            true_fub_ids, fub_names = self.get_categorical_positions(fub_id)
+
+            true_fub_id1s, fub_names1 = self.get_categorical_positions(fub_id1)
+
+
+
+            if true_y == 1:
+                orig_label = self.orig_sample[fb_id]==fb_id_one
+            else:
+                orig_label = np.logical_xor(self.orig_sample[fub_id],self.orig_sample[fub_id1])
+
+            label = 1-orig_label
+
+            # final label is true if (not ood and biased_f ==1) or (ood and ((ub ==1 and ub1==0) or (ub==0 and ub1==1) )
+            if label == 1:
+
+                v = And([true_fb_ids[1], GT(self.outs[1], self.outs[0])])
+                a1 = And([true_fub_ids[1], true_fub_id1s[0]])
+                a2 = And([true_fub_ids[0], true_fub_id1s[1]])
+                temp = Or([a1,a2])
+                w = And([temp, GT(self.outs[0], self.outs[1])])
+
+            else:
+                # final label is true if (not ood and biased_f ==1) or (ood and ((ub ==0 and ub1==0) or (ub==1 and ub1==1) )
+
+                v = And([true_fb_ids[0], GT(self.outs[1], self.outs[0])])
+                a1 = And([true_fub_ids[0], true_fub_id1s[0]])
+                a2 = And([true_fub_ids[1], true_fub_id1s[1]])
+
+                temp = Or([a1,a2])
+                w = And([temp, GT(self.outs[0], self.outs[1])])
+            self.oracle.add_assertion(Or([v, w]))
+
+        else:
+            # forcing a misclassification, i.e. a wrong observation
+            disj = []
+            for i in range(len(self.outs)):
+                if i != self.out_id:
+                    disj.append(GT(self.outs[i], self.outs[self.out_id]))
+            self.oracle.add_assertion(Implies(self.selv, Or(disj)))
+
+
+        if self.verbose:
+            inpvals = self.xgb.readable_sample(sample)
+
+            self.preamble = []
+            for f, v in zip(self.xgb.feature_names, inpvals):
+                if f not in str(v):
+                    self.preamble.append('{0} = {1}'.format(f, str(v)))
+                else:
+                    self.preamble.append(v)
+
+            print('  explaining:  "IF {0} THEN {1}"'.format(' AND '.join(self.preamble), self.output))
+
+
 
     def prepare(self, sample):
         """
@@ -220,6 +433,8 @@ class SMTExplainer(object):
             if i != self.out_id:
                 disj.append(GT(self.outs[i], self.outs[self.out_id]))
         self.oracle.add_assertion(Implies(self.selv, Or(disj)))
+
+
 
         if self.verbose:
             inpvals = self.xgb.readable_sample(sample)
@@ -381,12 +596,17 @@ class SMTExplainer(object):
         #
         # plot_bar(xvals, norm_holler, 'Features', 'normalized holler-packel index', basename,  str(idx)+"_holler.png")
 
-    def compute_all_minimal_expls(self, sample,writer=None,lock=None,idx=None,num_f=None):
+
+
+    def compute_all_minimal_expls(self, sample,writer=None,lock=None,idx=None,num_f=None,kwargs=None):
         self.time = resource.getrusage(resource.RUSAGE_CHILDREN).ru_utime + \
                     resource.getrusage(resource.RUSAGE_SELF).ru_utime
 
         # adapt the solver to deal with the current sample
-        self.prepare(sample)
+        if kwargs is not None:
+            self.prepare_(sample,kwargs=kwargs)
+        else:
+            self.prepare(sample)
 
 
         self.time = resource.getrusage(resource.RUSAGE_CHILDREN).ru_utime + \
